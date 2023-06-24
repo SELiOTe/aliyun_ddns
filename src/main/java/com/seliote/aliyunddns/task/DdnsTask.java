@@ -8,6 +8,7 @@ import com.aliyun.sdk.service.alidns20150109.models.DescribeDomainRecordsRespons
 import com.aliyun.sdk.service.alidns20150109.models.UpdateDomainRecordRequest;
 import com.google.gson.Gson;
 import com.seliote.aliyunddns.conf.AliyunConfig;
+import com.seliote.aliyunddns.conf.NetworkConfig;
 import darabonba.core.client.ClientOverrideConfiguration;
 import jakarta.annotation.PreDestroy;
 import lombok.extern.slf4j.Slf4j;
@@ -18,6 +19,8 @@ import org.springframework.stereotype.Component;
 import java.net.*;
 import java.time.Duration;
 import java.util.ArrayList;
+import java.util.List;
+import java.util.Optional;
 import java.util.concurrent.ExecutionException;
 import java.util.concurrent.TimeUnit;
 
@@ -31,15 +34,17 @@ import java.util.concurrent.TimeUnit;
 @Component
 public class DdnsTask {
 
-    public static final String IPV4_ADDR = "A";
+    public static final String IPV4_TYPE = "A";
     public static final String IPV6_TYPE = "AAAA";
 
     private final AliyunConfig aliyunConfig;
+    private final NetworkConfig networkConfig;
     private final AsyncClient asyncClient;
 
     @Autowired
-    public DdnsTask(AliyunConfig aliyunConfig) {
+    public DdnsTask(AliyunConfig aliyunConfig, NetworkConfig networkConfig) {
         this.aliyunConfig = aliyunConfig;
+        this.networkConfig = networkConfig;
         this.asyncClient = AsyncClient.builder()
                 .region(aliyunConfig.getApi().getRegion())
                 .credentialsProvider(StaticCredentialProvider.create(
@@ -62,18 +67,27 @@ public class DdnsTask {
 
     @Scheduled(fixedDelayString = "${aliyun.api.period-seconds}", timeUnit = TimeUnit.SECONDS)
     public void task() throws ExecutionException, InterruptedException, SocketException, UnknownHostException {
-        var domainRecord = describeDomainRecord();
-        var ip = ipAddr(IPV4_ADDR.equals(domainRecord.getType()));
-        if (ip.equals(domainRecord.getValue())) {
-            log.debug("IP address {} is same to DNS record, skip config", ip);
-            return;
+        var domainRecords = describeDomainRecord();
+        for (DescribeDomainRecordsResponseBody.Record domainRecord : domainRecords) {
+            boolean isIpv4 = IPV4_TYPE.equals(domainRecord.getType());
+            var ip = ipAddr(isIpv4);
+            if (ip.isEmpty()) {
+                log.warn("Failed get '{}' address for interface {}, skip override configuration",
+                        isIpv4 ? IPV4_TYPE : IPV6_TYPE, networkConfig.getInterfaceName());
+                continue;
+            }
+            if (ip.get().equals(domainRecord.getValue())) {
+                log.debug("IP address '{}' is same to Aliyun DNS record, skip override configuration", ip);
+                continue;
+            }
+            updateDomainRecord(domainRecord.getRecordId(), domainRecord.getRr(),
+                    domainRecord.getType(), domainRecord.getTTL(), ip.get());
         }
-        updateDomainRecord(domainRecord.getRecordId(), domainRecord.getRr(),
-                domainRecord.getType(), domainRecord.getTTL(), ip);
     }
 
-    private DescribeDomainRecordsResponseBody.Record describeDomainRecord()
+    private List<DescribeDomainRecordsResponseBody.Record> describeDomainRecord()
             throws ExecutionException, InterruptedException {
+        List<DescribeDomainRecordsResponseBody.Record> records = new ArrayList<>();
         var req = DescribeDomainRecordsRequest.builder()
                 .domainName(aliyunConfig.getDns().getDomainName())
                 .keyWord(aliyunConfig.getDns().getRr())
@@ -86,50 +100,50 @@ public class DdnsTask {
         if (body != null && body.getTotalCount() != null && body.getTotalCount() != 0
                 && body.getDomainRecords() != null && body.getDomainRecords().getRecord() != null) {
             for (var record : body.getDomainRecords().getRecord()) {
-                if (aliyunConfig.getDns().getRr().equals(record.getRr())) {
-                    if (!IPV6_TYPE.equals(record.getType()) && !IPV4_ADDR.equals(record.getType())) {
-                        log.error("DNS record type is {}, only support 'A' or 'AAAA' record", record.getType());
-                        throw new IllegalStateException("Error DNS record type");
-                    }
-                    return record;
+                if (aliyunConfig.getDns().getRr().equals(record.getRr())
+                        && (IPV4_TYPE.equals(record.getType()) || IPV6_TYPE.equals(record.getType()))) {
+                    log.debug("Found DNS record '{}.{}', IP is {}",
+                            record.getRr(), record.getDomainName(), record.getValue());
+                    records.add(record);
                 }
             }
         }
-        log.error("There is no DNS record for '{}.{}', " +
-                        "please check at aliyun DNS console: https://dns.console.aliyun.com",
-                aliyunConfig.getDns().getRr(), aliyunConfig.getDns().getDomainName());
-        throw new IllegalStateException("No DNS record");
+        if (records.size() == 0) {
+            log.error("There is no DNS record for '{}.{}' with type '{}' or '{}', " +
+                            "please check at aliyun DNS console: https://dns.console.aliyun.com",
+                    IPV4_TYPE, IPV6_TYPE, aliyunConfig.getDns().getRr(), aliyunConfig.getDns().getDomainName());
+            throw new IllegalStateException("No DNS record matched");
+        }
+        return records;
     }
 
-    private String ipAddr(Boolean ipv4) throws SocketException, UnknownHostException {
-        var networkInterfaces = NetworkInterface.getNetworkInterfaces();
+    private Optional<String> ipAddr(Boolean ipv4) throws SocketException, UnknownHostException {
+        log.debug("Get IP address by interface name {}", networkConfig.getInterfaceName());
+        var networkInterface = NetworkInterface.getByName(networkConfig.getInterfaceName());
         var ipList = new ArrayList<String>();
-        while (networkInterfaces.hasMoreElements()) {
-            var networkInterface = networkInterfaces.nextElement();
-            log.debug("Detect network interface {}", networkInterface.getDisplayName());
-            var addrs = networkInterface.getInetAddresses();
-            while (addrs.hasMoreElements()) {
-                var addr = addrs.nextElement();
-                if (addr.isAnyLocalAddress() || addr.isLoopbackAddress()
-                        || addr.isSiteLocalAddress() || addr.isLinkLocalAddress()) {
-                    log.debug("Skip address '{}' because it is not a WAN address", addr);
-                    continue;
-                }
-                if ((ipv4 && addr instanceof Inet6Address) || (!ipv4 && addr instanceof Inet4Address)) {
-                    log.debug("Skip address '{}' in {} mode", addr, ipv4 ? "IPV4" : "IPV6");
-                    continue;
-                }
-                var ip = InetAddress.getByAddress(addr.getAddress()).getHostAddress();
-                ipList.add(ip);
-                log.debug("Add '{}' to candidate", addr.getHostAddress());
+        var addrs = networkInterface.getInetAddresses();
+        while (addrs.hasMoreElements()) {
+            var addr = addrs.nextElement();
+            if ((ipv4 && addr instanceof Inet6Address) || (!ipv4 && addr instanceof Inet4Address)) {
+                log.debug("Skip address '{}' in {} mode", addr, ipv4 ? "IPV4" : "IPV6");
+                continue;
             }
+            if (addr.isAnyLocalAddress() || addr.isLoopbackAddress()
+                    || addr.isSiteLocalAddress() || addr.isLinkLocalAddress()) {
+                log.debug("Skip address '{}' because it is not a WAN address", addr);
+                continue;
+            }
+            var ip = InetAddress.getByAddress(addr.getAddress()).getHostAddress();
+            ipList.add(ip);
+            log.debug("Add '{}' to candidate", addr.getHostAddress());
+
         }
         if (ipList.size() != 1) {
-            log.error("There is no useful or more then one {} address",
+            log.warn("There is no useful or more then one {} address",
                     ipv4 ? "IPV4" : "IPV6");
-            throw new IllegalStateException("No useful or more then one IP address");
+            return Optional.empty();
         }
-        return ipList.get(0);
+        return Optional.of(ipList.get(0));
     }
 
     private void updateDomainRecord(String recordId, String rr, String type, Long ttl, String value)

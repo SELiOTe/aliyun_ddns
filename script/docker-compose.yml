@@ -4,12 +4,15 @@ services:
     container_name: aliyun-ddns
     restart: always
     network_mode: host
+    dns:
+      - 223.5.5.5
     image: aliyun-ddns:v1
     environment:
       ACCESS_KEY_ID:
       ACCESS_KEY_SECRET:
       DOMAIN_NAME:
       DOMAIN_RR:
+      NETWORK_INTERFACE:
       LOG_LEVEL: debug
       API_PERIOD_SECONDS: 300
       API_REGION: cn-hangzhou
