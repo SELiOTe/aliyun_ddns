@@ -10,13 +10,13 @@
 
 ## 配置
 
-| 环境变量                         | 说明                              | 是否必填                                | 默认值     |
-|------------------------------|---------------------------------|-------------------------------------|---------|
-| ACCESS_KEY_ID                | 阿里云 access key id               | 是                                   | /       |
-| ACCESS_KEY_SECRET            | 阿里云 access key secret           | 是                                   | /       |
-| DOMAIN_NAME                  | 域名                              | 是                                   | /       |
-| DOMAIN_RR                    | 域名前缀                            | 是                                   | /       |
-| LOG_LEVEL                    | 日志级别，可选值 `debug` `info` `error` | 否                                   | `debug` |
-| API_PERIOD_SECONDS           | API 调用频率，即多久更新一次域名解析，单位秒        | 否                                   | 300     |
-| API_REGION ｜ 阿里云 API 区域  ｜ 否 | cn-hangzhou                     |
-| API_ENDPOINT                 | 阿里云 endpoint                    | 否 ｜ alidns.cn-hangzhou.aliyuncs.com |
+| 环境变量               | 说明                              | 是否必填 | 默认值                             |
+|--------------------|---------------------------------|------|---------------------------------|
+| ACCESS_KEY_ID      | 阿里云 access key id               | 是    | /                               |
+| ACCESS_KEY_SECRET  | 阿里云 access key secret           | 是    | /                               |
+| DOMAIN_NAME        | 域名                              | 是    | /                               |
+| DOMAIN_RR          | 域名前缀                            | 是    | /                               |
+| LOG_LEVEL          | 日志级别，可选值 `debug` `info` `error` | 否    | `debug`                         |
+| API_PERIOD_SECONDS | API 调用频率，即多久更新一次域名解析，单位秒        | 否    | 300                             |
+| API_REGION         | 阿里云 API 区域                      | 否    | cn-hangzhou                     |
+| API_ENDPOINT       | 阿里云 endpoint                    | 否    | alidns.cn-hangzhou.aliyuncs.com |
