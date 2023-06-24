@@ -5,7 +5,7 @@
 
 ## 使用
 
-1. 源代码打包或下载 release 中最新 jar 包至指定目4
+1. 源代码打包或下载 release 中最新 jar 包至指定目录
 2. 在步骤 1 中的目录中执行 `docker build -t aliyun-ddns:v1 .`
 3. 编辑 script/docker-compose.yml 修改相应环境变量，复制至步骤 1 中的目录执行 `docker-compose up -d` 启动容器
 
