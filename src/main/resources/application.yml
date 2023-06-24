@@ -1,0 +1,16 @@
+logging:
+  level:
+    com.aliyun.sdk: warn
+    com.seliote.aliyunddns: ${LOG_LEVEL:info}
+aliyun:
+  access-key:
+    id: ${ACCESS_KEY_ID:}
+    secret: ${ACCESS_KEY_SECRET:}
+  api:
+    period-seconds: ${API_PERIOD_SECONDS:300}
+    region: ${API_REGION:cn-hangzhou}
+    endpoint: ${API_ENDPOINT:alidns.cn-hangzhou.aliyuncs.com}
+    conn-timeout: ${API_COON_TIMEOUT:3000}
+  dns:
+    domain-name: ${DOMAIN_NAME:}
+    rr: ${DOMAIN_RR:}

@@ -1,0 +1,16 @@
+version: '3.8'
+services:
+  aliyun-ddns:
+    container_name: aliyun-ddns
+    restart: always
+    network_mode: host
+    image: aliyun-ddns:v1
+    environment:
+      ACCESS_KEY_ID:
+      ACCESS_KEY_SECRET:
+      DOMAIN_NAME:
+      DOMAIN_RR:
+      LOG_LEVEL: debug
+      API_PERIOD_SECONDS: 300
+      API_REGION: cn-hangzhou
+      API_ENDPOINT: alidns.cn-hangzhou.aliyuncs.com
